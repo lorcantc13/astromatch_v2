@@ -209,7 +209,7 @@ if st.button("🚀 Run Analysis") and target_env and user_weights:
 if 'res_df' in st.session_state:
     res_df = st.session_state['res_df']
     
-    st.subheader("🏆 Selection-Sync Dashboard")
+    st.subheader("🏆 Ranked Shortlist")
     
     # Display Top 5
     display_cols = ['Site', 'Suitability', 'Confidence', 'Alerts']
