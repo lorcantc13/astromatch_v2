@@ -53,7 +53,7 @@ params_config = {
     "pH": {"color": "#00CC96", "default": 5, "col_prefix": "pH"},
     "Pressure": {"color": "#AB63FA", "default": 5, "col_prefix": "Pres"},
     "Isolation": {"color": "#6ab7f1", "default": 5, "col_prefix": "Iso"},
-    "Redox Potential": {"color": "#FFDB58", "default": 5, "col_prefix": "Redox"}
+    "Redox Potential": {"color": "#FF8C00", "default": 5, "col_prefix": "Redox"}
 }
 
 user_weights = {}
