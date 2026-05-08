@@ -1,3 +1,5 @@
+from math import erf, sqrt, pi
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -20,26 +22,74 @@ def load_data():
 
 analogues_df, targets_df = load_data()
 
-# --- 3. SCORING ENGINE (GAUSSIAN-JACCARD) ---
-def calculate_suitability(site_min, site_max, target_min, target_max):
-    if pd.isna(site_min) or pd.isna(target_min) or pd.isna(site_max) or pd.isna(target_max):
-        return None # Indicates missing data
-    
-    s_mid = (site_min + site_max) / 2
-    t_mid = (target_min + target_max) / 2
-    t_width = max(target_max - target_min, 1.0)
-    
-    sigma = t_width 
-    gaussian = np.exp(-((s_mid - t_mid)**2) / (2 * sigma**2))
-    
-    overlap_min = max(site_min, target_min)
-    overlap_max = min(site_max, target_max)
-    
-    if overlap_max > overlap_min:
-        intersection = overlap_max - overlap_min
-        union = max(site_max, target_max) - min(site_min, target_min)
-        return max(gaussian, intersection / union)
-    return gaussian
+# --- 3. SCORING ENGINE (ASYMMETRIC TOLERANCE ENVELOPE + LETHAL CLIFF) ---
+#
+# Lethal-limit envelopes for known terrestrial life. Used as hard cliffs:
+# any portion of the target range outside these bounds contributes zero
+# regardless of how close the analogue site comes. Sources are summarised
+# in documentation/scoring_theory.md. None means "no universal limit".
+LETHAL_LIMITS = {
+    "T":     (-25.0, 122.0),   # Eutectic brines (Marion 2003) → M. kandleri 122 (Takai 2008)
+    "Sal":   (None, None),     # No universal salinity ceiling; halophiles to NaCl saturation
+    "pH":    (-0.06, 13.0),    # Picrophilus torridus → Serpentinomonas
+    "Pres":  (0.0, 1100.0),    # Sharma 2002 (~1.1 GPa metabolic activity)
+    "Iso":   (None, None),     # Ordinal score; no biological universal
+    "Redox": (None, None),
+}
+
+def calculate_suitability(site_min, site_max, target_min, target_max,
+                          lethal_min=None, lethal_max=None):
+    """Score how well an analogue site's range *contains* a target range.
+
+    Models the observed analogue range [site_min, site_max] as the inferred
+    tolerance envelope of life that survives there: full credit for target
+    conditions inside the envelope, Gaussian-decaying credit just outside,
+    and a hard zero beyond the universal-life lethal limits.
+
+    The score is asymmetric on purpose. The biological question is "could
+    the analogue's organism survive these target conditions?", not "are
+    these two ranges similar?" — so a wide-tolerance analogue covering a
+    narrow target should score 1.0, while the reverse should not.
+    """
+    if any(pd.isna(v) for v in (site_min, site_max, target_min, target_max)):
+        return None
+
+    # Hard lethal short-circuit: target entirely outside life's envelope.
+    if lethal_min is not None and target_max < lethal_min:
+        return 0.0
+    if lethal_max is not None and target_min > lethal_max:
+        return 0.0
+
+    # Clip target to the viable envelope; mass outside contributes 0 to the score.
+    eff_t_min = target_min if lethal_min is None else max(target_min, lethal_min)
+    eff_t_max = target_max if lethal_max is None else min(target_max, lethal_max)
+    if eff_t_max <= eff_t_min:
+        return 0.0
+    viable_fraction = (eff_t_max - eff_t_min) / max(target_max - target_min, 1e-9)
+
+    # Soft-edge bandwidth: 25% of analogue range, floored to avoid degenerate
+    # zero widths from single-point site measurements.
+    delta = 0.25 * max(site_max - site_min, 1.0)
+
+    # μ(x) is 1 on [site_min, site_max] and decays as exp(-((dist)/delta)^2)
+    # outside it. Compute the mean of μ over [eff_t_min, eff_t_max] in closed
+    # form: inside contributes its overlap length; the two outside tails are
+    # erf differences of the Gaussian decay.
+    inside_lo = max(eff_t_min, site_min)
+    inside_hi = min(eff_t_max, site_max)
+    inside_area = max(inside_hi - inside_lo, 0.0)
+
+    half_sqrt_pi_delta = (sqrt(pi) / 2.0) * delta
+    def _gauss_tail_integral(a, b, centre):
+        if b <= a:
+            return 0.0
+        return half_sqrt_pi_delta * (erf((b - centre) / delta) - erf((a - centre) / delta))
+
+    below_area = _gauss_tail_integral(eff_t_min, min(eff_t_max, site_min), site_min)
+    above_area = _gauss_tail_integral(max(eff_t_min, site_max), eff_t_max, site_max)
+
+    mean_membership = (inside_area + below_area + above_area) / (eff_t_max - eff_t_min)
+    return float(np.clip(mean_membership * viable_fraction, 0.0, 1.0))
 
 # --- 4. SIDEBAR: WEIGHTING & VISUALS ---
 st.sidebar.header("🎯 Importance Weights")
@@ -142,7 +192,12 @@ if st.button("🚀 Run Analysis") and target_env and user_weights:
             t_min_col = f"{prefix}_min" if f"{prefix}_min" in target_data else f"{prefix}_score"
             t_max_col = f"{prefix}_max" if f"{prefix}_max" in target_data else f"{prefix}_score"
 
-            fit = calculate_suitability(site[min_col], site[max_col], target_data[t_min_col], target_data[t_max_col])
+            lethal_lo, lethal_hi = LETHAL_LIMITS.get(prefix, (None, None))
+            fit = calculate_suitability(
+                site[min_col], site[max_col],
+                target_data[t_min_col], target_data[t_max_col],
+                lethal_min=lethal_lo, lethal_max=lethal_hi,
+            )
             
             if fit is not None:
                 site_fits[param] = fit
@@ -156,10 +211,20 @@ if st.button("🚀 Run Analysis") and target_env and user_weights:
                 site_fits[param] = "N/A"
                 site_rels[param] = "N/A"
 
-        # Calculate Suitability (Neutral impact for missing)
+        # Liebig aggregation: weighted *geometric* mean of per-parameter fits.
+        # A weighted arithmetic mean lets a perfect score on five parameters
+        # mask a lethal sixth, which contradicts ecology's Law of the Minimum.
+        # The geometric mean is the joint survival probability under
+        # independence and collapses toward zero whenever any single fit does.
         actual_w_sum = sum(active_site_weights.values())
         if actual_w_sum > 0:
-            final_score = sum(site_fits[p] * active_site_weights[p] for p in active_site_weights) / actual_w_sum
+            log_score = 0.0
+            for p, w in active_site_weights.items():
+                # Floor at epsilon so log() is defined on hard-zero fits while
+                # still propagating their dominance through the product.
+                fit = max(float(site_fits[p]), 1e-3)
+                log_score += (w / actual_w_sum) * np.log(fit)
+            final_score = float(np.exp(log_score))
         else:
             final_score = 0.0
             
