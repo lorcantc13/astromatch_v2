@@ -28,12 +28,23 @@ analogues_df, targets_df = load_data()
 # any portion of the target range outside these bounds contributes zero
 # regardless of how close the analogue site comes. Sources are summarised
 # in documentation/scoring_theory.md. None means "no universal limit".
+#
+# Values were sanity-checked against the cited literature (May 2026).
+# They are deliberately conservative and intended to be reviewed by a
+# domain expert before any scientific publication.
 LETHAL_LIMITS = {
-    "T":     (-25.0, 122.0),   # Eutectic brines (Marion 2003) → M. kandleri 122 (Takai 2008)
-    "Sal":   (None, None),     # No universal salinity ceiling; halophiles to NaCl saturation
-    "pH":    (-0.06, 13.0),    # Picrophilus torridus → Serpentinomonas
-    "Pres":  (0.0, 1100.0),    # Sharma 2002 (~1.1 GPa metabolic activity)
-    "Iso":   (None, None),     # Ordinal score; no biological universal
+    "T":     (-25.0, 122.0),   # Cold: cryobrine/perchlorate literature (Toner et al. 2014).
+                               # Hot: Methanopyrus kandleri strain 116 at 122 C / 20 MPa
+                               #      (Takai et al. 2008, PNAS 105:10949).
+    "Sal":   (None, None),     # No universal upper salinity cap; halophiles grow to NaCl saturation.
+    "pH":    (0.0, 12.5),      # Acid: Picrophilus torridus growth around pH 0 (Schleper et al. 1995).
+                               # Alkali: Serpentinimonas maccroryi B1 at pH 12.5 (Suzuki et al. 2021,
+                               #         IJSEM; original genus described in Suzuki et al. 2014, Nat Commun).
+    "Pres":  (0.0, 1100.0),    # Active metabolism observed up to ~1060 MPa for E. coli / Shewanella
+                               # (Sharma et al. 2002, Science 295:1514). Cell viability extends to
+                               # ~1600 MPa in fluid inclusions; 1100 MPa is the conservative
+                               # active-growth cap.
+    "Iso":   (None, None),     # Ordinal score; no biological universal.
     "Redox": (None, None),
 }
 

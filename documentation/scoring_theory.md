@@ -84,14 +84,22 @@ zero; targets that straddle the cliff have their score reduced
 proportionally to the viable fraction. Sources for each constant are in
 `LETHAL_LIMITS` in `astromatch_v2.py`.
 
-| Parameter   | Lower lethal | Upper lethal | Source                                  |
-|-------------|--------------|--------------|-----------------------------------------|
-| Temperature | −25 °C       | 122 °C       | Marion 2003 / Takai 2008                |
-| pH          | −0.06        | 13.0         | Picrophilus / Serpentinomonas           |
-| Pressure    | 0 MPa        | 1100 MPa     | Sharma et al. 2002                      |
-| Salinity    | —            | —            | Halophile literature; no universal cap  |
-| Isolation   | —            | —            | Ordinal score; no universal             |
-| Redox       | —            | —            | Ordinal score; no universal             |
+| Parameter   | Lower lethal | Upper lethal | Source                                                                       |
+|-------------|--------------|--------------|------------------------------------------------------------------------------|
+| Temperature | −25 °C       | 122 °C       | Cold: Toner et al. 2014 (Mars perchlorate brines). Hot: Takai et al. 2008 (*M. kandleri* strain 116 at 122 °C / 20 MPa, PNAS 105:10949). |
+| pH          | 0.0          | 12.5         | Acid: Schleper et al. 1995 (*Picrophilus torridus*, J. Bacteriol. 177:7050). Alkali: Suzuki et al. 2021 (*Serpentinimonas maccroryi* B1, pH 12.5 record); genus described in Suzuki et al. 2014, *Nat. Commun.* 5:3900. |
+| Pressure    | 0 MPa        | 1100 MPa     | Sharma et al. 2002, *Science* 295:1514. Active formate oxidation observed up to ~1060 MPa; 1100 MPa is the conservative active-growth cap. |
+| Salinity    | —            | —            | No universal upper cap; halophiles grow to NaCl saturation.                  |
+| Isolation   | —            | —            | Ordinal score; no biological universal.                                      |
+| Redox       | —            | —            | Ordinal score; no biological universal.                                      |
+
+> **A note on these constants.** They were checked against published
+> sources (May 2026) and are conservative, but specific numeric edges
+> are inherently judgement calls — the *Picrophilus* paper reports growth
+> down to pH 0.03 with adapted strains, the Sharma paper reports cell
+> *viability* (not active metabolism) up to ~1600 MPa, etc. The intent
+> is a defensible default, not a published constants table. A domain
+> expert should review these before any scientific use.
 
 ## Worked example
 
