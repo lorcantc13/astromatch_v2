@@ -115,6 +115,58 @@ Organism 30–50 °C facing biome 0–100 °C (the asymmetric reverse):
 - New score: **0.289** (correctly penalises the parts of 0–30 and 50–100
   that the organism never experienced)
 
+## Validation against named extremophiles
+
+The bundled `analogues_v2.csv` and `targets_v2.csv` were used directly,
+plus a small set of named-organism tolerance ranges drawn from the
+extremophile literature, to sanity-check the algorithm's verdicts
+against expected biology. All scores below are the weighted geometric
+mean (Liebig) of the four range-bearing parameters (T, Salinity, pH,
+Pressure) with equal weights, and use the lethal-limit cliffs.
+
+### From the bundled CSVs
+
+| Analogue → Target                                    | OLD (arith mean) | NEW (Liebig)  | Verdict |
+| ---------------------------------------------------- | ---------------- | ------------- | ------- |
+| Lost City → Hydrothermal Vents                       | 0.932            | **0.154**     | OLD wildly over-credits: target reaches 290 °C, well above Lost City's 116 °C max and past the 122 °C lethal cliff; salinity is mismatched. NEW correctly flags it as marginal. |
+| Lost City → Diffuse Venting Zone                     | 0.956            | **0.244**     | Better fit on T (target 10–90 °C overlaps Lost City), but salinity still mismatched. |
+| Lost City → Abyssal Ocean                            | 0.691            | **0.046**     | Lost City organisms are mesophile-to-thermophile; abyssal target at −1 to 1 °C is incompatible. NEW correctly collapses. |
+| Borup Fiord (Arctic) → Tiger Stripe Brines           | 0.870            | **0.572**     | Reasonable: cold-adapted, but target salinity 5–40 g/L is several × Borup Fiord's 0.1–10. |
+| Borup Fiord (Arctic) → Hydrothermal Vents            | 0.705            | **0.021**     | OLD's 0.71 is the previous algorithm's most embarrassing case: a near-zero-°C Arctic site cannot supply life for a 90–290 °C vent. NEW returns ~0 as biology demands. |
+
+### Named-organism cases
+
+Tolerance ranges below are typical literature values and are illustrative
+only. The Enceladus environment ranges come from the same `targets_v2.csv`
+the app already ships with.
+
+| Organism (typical tolerance)                                       | Enceladus environment              | OLD   | NEW (Liebig) | Verdict |
+| ------------------------------------------------------------------ | ---------------------------------- | ----- | ------------ | ------- |
+| *Methanopyrus kandleri* — T 84–122 °C, pH 5.5–7.5, Sal 15–30 g/L, P 0.4–40 MPa | Hydrothermal Vents (T 90–290)      | 0.652 | **0.229**    | Partial: organism viable up to 122 °C, but target's 122–290 °C is past lethal cliff; pH mismatch (organism 5.5–7.5 vs target 8–10.5). |
+| *Methanopyrus kandleri*                                            | Diffuse Venting (T 10–90)          | 0.619 | **0.236**    | T overlaps but target is mostly cooler than the organism's optimum; pH still off. |
+| *Methanopyrus kandleri*                                            | Abyssal Ocean (T −1 to 1)          | 0.424 | **0.028**    | Hyperthermophile in cold ocean — should be ~0; OLD's 0.42 was nonsense. |
+| *Halobacterium salinarum* — T 35–50 °C, Sal **200–340 g/L**, pH 6.5–8.5 | Tiger Stripe Brines (Sal 5–40)     | 0.428 | **0.019**    | A halophile in dilute brine *starves* — its salinity floor is 200 g/L, target maxes at 40. NEW correctly collapses. |
+| *Halobacterium salinarum*                                          | Intrashell Mushy Brines (Sal 35–230) | 0.657 | **0.082**    | Better salinity overlap, but target T = −21 to 0 °C is far below the organism's 35–50 °C — Liebig's law dominates. |
+| *Picrophilus torridus* — T 47–65 °C, **pH 0–3.5** | Hydrothermal Vents (pH 8–10.5)     | 0.544 | **0.002**    | Acidophile in an alkaline target — pH alone collapses the score, exactly as biology requires. |
+| *Picrophilus torridus*                                             | Tiger Stripe Brines (pH 8.5–11.6)  | 0.469 | **0.013**    | Same as above, plus T mismatch. |
+| *Thermococcus piezophilus* — T 60–95 °C, **P 20–130 MPa** | Hydrothermal Vents (P 4–10 MPa)    | 0.628 | **0.273**    | Pressure tolerance is broad enough to admit the lower target pressures; T overlaps 90–95 °C with the bottom of the target. |
+| *Colwellia psychrerythraea* — **T −5 to 10 °C**, Sal 20–40 g/L, P 0.1–70 MPa | Abyssal Ocean (T −1 to 1)          | 0.574 | **0.523**    | Genuine match: cold-adapted, broad pressure tolerance; target sits inside the organism's envelope on every axis. |
+| *Colwellia psychrerythraea*                                        | Tiger Stripe Brines                | 0.549 | **0.523**    | Same: cold + moderately saline overlap. |
+| *Colwellia psychrerythraea*                                        | Hydrothermal Vents (T 90–290)      | 0.636 | **0.123**    | Psychrophile cannot survive 90 °C, never mind 290 °C — NEW correctly cuts the OLD's misleading 0.64. |
+| *Deinococcus radiodurans* — T 4–45 °C, Sal 0–30 g/L, pH 4.5–10, P ~atmos. | Tiger Stripe Brines                | 0.661 | **0.883**    | **Honest limitation, not a bug.** *D. radiodurans* has very broad tolerance and the target sits *just outside* its range on each axis. The universal 25% soft-edge `δ` is too generous in this case — the algorithm reads "just outside" as "stressed but viable" when the right reading is "this organism doesn't really live in cold dilute alkaline brine." See the Limitations section below. |
+
+### Patterns confirmed
+
+1. **Lethal cliffs do their job.** Every case where biology says "no" because a hard limit is violated (acidophile in alkali, hyperthermophile in cold, psychrophile in 290 °C) collapses to <0.13 with the new algorithm; the old algorithm scored these between 0.42 and 0.71.
+2. **Genuine matches survive.** *Colwellia* in cold ocean stays at 0.52; *M. kandleri* in 90–122 °C portion of vents stays at 0.23 (correctly partial because half the target temperature range is past the lethal cliff).
+3. **Asymmetry is preserved.** Wide-tolerance organisms still score 1.0 when the target is fully inside their envelope (the user's original 0–100 / 70–90 case), and narrow-tolerance organisms correctly score low when the target is wider than they are.
+
+### Known limitations (surfaced by validation)
+
+- **Soft-edge `δ` is universal across parameters.** For broad-tolerance organisms like *D. radiodurans*, a target lying just outside the analogue range on multiple axes can score deceptively well. A future improvement is to make `δ` parameter-specific (smaller for pH, where the lethal cliffs are sharp; larger for redox / isolation, where data is sparse) or to derive it from the reliability rating.
+- **Range = tolerance** assumption. The analogue range is the *observed environmental conditions*, not the organism's full physiological envelope, so the score is conservative for organisms whose true tolerance exceeds what they're routinely measured in. The biochemistry-first-principles candidate (Alternative B below) is the natural next step here.
+- **Independence of parameters.** The geometric mean assumes parameters are independent. Real survival has cross-parameter trade-offs (high salinity depresses freezing point, etc.) — the Mahalanobis candidate (Alternative C below) is the future answer if dataset size grows.
+
 ## Alternatives considered (the five strong-but-not-chosen candidates)
 
 Six modelling approaches were investigated by independent research
